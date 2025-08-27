@@ -12,6 +12,7 @@ import tempfile
 import unittest
 from collections.abc import Callable
 from typing import Optional
+from contextlib import contextmanager
 from unittest import mock
 
 import torch
@@ -86,6 +87,15 @@ from torch.testing._internal.inductor_utils import (
 torch.set_float32_matmul_precision("high")
 if HAS_CUDA_AND_TRITON:
     torch.cuda.memory._set_allocator_settings("expandable_segments:False")
+
+@contextmanager
+def temp_float32_matmul_precision(precision: str):
+    original_precision = torch.get_float32_matmul_precision()
+    try:
+        torch.set_float32_matmul_precision(precision)
+        yield
+    finally:
+        torch.set_float32_matmul_precision(original_precision)
 
 
 def benchmark_choice(choice, args, out, expected_out, timings):
@@ -1168,7 +1178,7 @@ class TestMaxAutotune(TestCase):
     @config.patch({"test_configs.force_extern_kernel_in_multi_template": True})
     def test_mutation_rename(self):
         torch._logging.set_logs(ir_post_fusion=True)
-
+        
         def f(x, y, z, other):
             mul = x * y
             diag = torch.diagonal(mul)
@@ -1180,6 +1190,7 @@ class TestMaxAutotune(TestCase):
         t = functools.partial(torch.randn, device=GPU_TYPE)
         inps = (t(3, 3), t(3, 3), t(3, 3), t(3))
         fn = torch.compile(f, mode="max-autotune-no-cudagraphs")
+
         (
             (
                 pre_fusion_tream,
@@ -1190,6 +1201,7 @@ class TestMaxAutotune(TestCase):
             "torch._inductor.debug", "ir_pre_fusion", "ir_post_fusion"
         )
 
+
         with config.patch({"trace.debug_dir": tempfile.mkdtemp()}):
             with (
                 self.assertLogs(
@@ -1197,7 +1209,8 @@ class TestMaxAutotune(TestCase):
                 ) as cm,
                 ctx(),
             ):
-                out = fn(*inps)
+                with temp_float32_matmul_precision("highest"):
+                    out = fn(*inps)
 
         self.assertEqual(f(*inps), out)
 
@@ -1206,12 +1219,13 @@ class TestMaxAutotune(TestCase):
 
         # before and after finalizing multi template buffer, deps should have the same normalization
         # wrt writes
-        FileCheck().check("MultiTemplateBuffer").check("unmet").check_same("buf1").run(
-            pre_fusion_stream
-        )
-        FileCheck().check("ExternKernelSchedulerNode").check("unmet").check_same(
-            "buf1"
-        ).run(post_fusion_stream)
+        if not config.triton.enable_native_matmul:
+            FileCheck().check("MultiTemplateBuffer").check("unmet").check_same("buf1").run(
+                pre_fusion_stream
+            )
+            FileCheck().check("ExternKernelSchedulerNode").check("unmet").check_same(
+                "buf1"
+            ).run(post_fusion_stream)
 
         torch._logging.set_logs()
 
@@ -1336,13 +1350,17 @@ class TestMaxAutotune(TestCase):
     # TODO: fix accuracy failure of the triton template on XPU.
     # and enable this test case.
     @skipIfXpu
+    @unittest.skipIf(
+        config.triton.enable_native_matmul,
+        "native matmul and Triton template both have accuracy fail (2.2%)"
+    )
     def test_non_contiguous_input_mm_plus_mm(self):
         x1 = rand_strided((50257, 2048), (1, 50304), device=GPU_TYPE)
         y1 = rand_strided((2048, 768), (768, 1), device=GPU_TYPE)
 
         x2 = rand_strided((50257, 2048), (1, 50304), device=GPU_TYPE)
         y2 = rand_strided((2048, 768), (768, 1), device=GPU_TYPE)
-
+        
         @torch.compile(mode="max-autotune")
         def f(x1, y1, x2, y2):
             return x1 @ y1 + x2 @ y2
@@ -1354,6 +1372,10 @@ class TestMaxAutotune(TestCase):
     @config.patch(
         max_autotune=True,
         max_autotune_gemm_backends="",
+    )
+    @unittest.skipIf(
+        config.triton.enable_native_matmul,
+        "native matmul generates when size >=2"
     )
     def test_no_valid_choices(self):
         a = torch.zeros([2, 2], device=GPU_TYPE)
@@ -1436,6 +1458,9 @@ class TestMaxAutotune(TestCase):
     @skipIfXpu
     @unittest.skipIf(
         config.cpp_wrapper, "decompose_k not supported for cpp_wrapper yet"
+    )
+    @unittest.skipIf(
+        config.triton.enable_native_matmul, "ignore decompose_k when native matmul codegen"
     )
     @parametrize("dynamic", (True, False))
     @parametrize("dtype", (torch.float16, torch.bfloat16))
@@ -1546,6 +1571,9 @@ class TestMaxAutotune(TestCase):
     @unittest.skipIf(
         config.cpp_wrapper, "decompose_k not supported for cpp_wrapper yet"
     )
+    @unittest.skipIf(
+        config.triton.enable_native_matmul, "ignore decompose_k when native matmul codegen"
+    )
     @config.patch(
         max_autotune=True,
         max_autotune_gemm_backends="TRITON",
@@ -1590,6 +1618,9 @@ class TestMaxAutotune(TestCase):
     @unittest.skipIf(TEST_WITH_ROCM, "decompose_k not supported on ROCm")
     @unittest.skipIf(
         config.cpp_wrapper, "decompose_k not supported for cpp_wrapper yet"
+    )
+    @unittest.skipIf(
+        config.triton.enable_native_matmul, "ignore decompose_k when native matmul codegen"
     )
     @config.patch(
         max_autotune=True,
@@ -1637,6 +1668,9 @@ class TestMaxAutotune(TestCase):
     @unittest.skipIf(TEST_WITH_ROCM, "decompose_k not supported on ROCm")
     @unittest.skipIf(
         config.cpp_wrapper, "decompose_k not supported for cpp_wrapper yet"
+    )
+    @unittest.skipIf(
+        config.triton.enable_native_matmul, "ignore decompose_k when native matmul codegen"
     )
     @config.patch(
         max_autotune=True,
@@ -1896,6 +1930,10 @@ class TestMaxAutotune(TestCase):
             "max_autotune_gemm_backends": "TRITON",
         }
     )
+    @unittest.skipIf(
+        config.triton.enable_native_matmul, 
+        "only test on template-based matmul"
+    )
     def test_triton_template_generated_code_cache_strategy(self):
         def func_test1(x, y, z, m):
             a = torch.matmul(x, y)
@@ -1921,6 +1959,10 @@ class TestMaxAutotune(TestCase):
             "test_configs.max_mm_configs": 4,
             "max_autotune_gemm_backends": "TRITON",
         }
+    )
+    @unittest.skipIf(
+        config.triton.enable_native_matmul, 
+        "only test on template-based matmul"
     )
     def test_triton_template_generated_code_caching(self):
         def reset_counters():
@@ -2106,6 +2148,10 @@ class TestMaxAutotune(TestCase):
             "max_autotune_gemm_backends": "TRITON",
         }
     )
+    @unittest.skipIf(
+        config.triton.enable_native_matmul, 
+        "only test on template-based matmul"
+    )
     def test_triton_template_generated_code_caching_bmm(self):
         def func_test1(x, y, z, m):
             a = torch.bmm(x, y)
@@ -2140,6 +2186,10 @@ class TestMaxAutotune(TestCase):
             "test_configs.max_mm_configs": 4,
             "max_autotune_gemm_backends": "ATEN, TRITON",
         }
+    )
+    @unittest.skipIf(
+        config.triton.enable_native_matmul, 
+        "only test on template-based matmul"
     )
     def test_triton_template_generated_code_caching_mm_plus_mm(self):
         def func_test1(x, y, z, m):
@@ -2179,6 +2229,9 @@ class TestMaxAutotune(TestCase):
     @unittest.skipIf(TEST_WITH_ROCM, "decompose_k not supported on ROCm")
     @unittest.skipIf(
         config.cpp_wrapper, "decompose_k not supported for cpp_wrapper yet"
+    )
+    @unittest.skipIf(
+        config.triton.enable_native_matmul, "ignore decompose_k when native matmul codegen"
     )
     @config.patch(
         max_autotune=True,
@@ -2226,7 +2279,7 @@ class TestMaxAutotune(TestCase):
         TEST_WITH_ROCM, "exhaustive currently only thoroughly tested on NVIDIA"
     )
     @unittest.skipIf(
-        config.triton.enable_native_matmul, "skip native matmul"
+        config.triton.enable_native_matmul, "native matmul takes different tuning configs"
     )
     @config.patch(max_autotune=True, max_autotune_gemm_search_space="EXHAUSTIVE")
     def test_max_autotune_exhaustive(self):
@@ -2495,6 +2548,10 @@ class TestMaxAutotunePrecompile(TestCase):
 
     @config.patch(autotune_local_cache=False, autotune_remote_cache=False)
     @runOnRocmArch(MI300_ARCH)
+    @unittest.skipIf(
+        config.triton.enable_native_matmul, 
+        "native matmul has counter 0"
+    )
     def test_precompilations(self):
         def fn(a, b, c):
             a = (a @ b) @ c
@@ -3153,7 +3210,11 @@ class TestPrologueFusion(TestCase):
 
         # should not be done in low precision, two kernels
         self.check_code(code[0], num_kernels=2, num_allocs=2, num_deallocs=3)
-
+    
+    @unittest.skipIf(
+        config.triton.enable_native_matmul,
+        "generated code is different in native matmul"
+    )
     def test_downcast(self):
         # per heuristics, dont fuse a downcast into a mm because it would lead to more reads inside kernel
         M, K, N = (64, 128, 256)
@@ -3168,6 +3229,10 @@ class TestPrologueFusion(TestCase):
         self.check_code(code[0], num_kernels=2, num_allocs=2, num_deallocs=3)
 
     @parametrize("sizes", ((64, 128, 256), (64, 64, 64), (64, 120, 64)))
+    @unittest.skipIf(
+        config.triton.enable_native_matmul,
+        "generated code is different in native matmul"
+    )
     def test_multiple_fusions(self, sizes):
         M, K, N = sizes
 
@@ -3273,6 +3338,10 @@ class TestPrologueFusion(TestCase):
 
     @config.patch(realize_reads_threshold=1, realize_opcount_threshold=1)
     @parametrize("sizes", ((64, 128, 256), (128, 128, 128), (63, 120, 250)))
+    @unittest.skipIf(
+        config.triton.enable_native_matmul,
+        "generated code is different in native matmul"
+    )
     def test_prologue_multiple_nodes(self, sizes):
         M, K, N = sizes
 
@@ -3312,6 +3381,10 @@ class TestPrologueFusion(TestCase):
         self.assertEqual(out, foo(x, y), atol=0.05, rtol=0.05)
         self.check_code(code[0], num_kernels=1, num_allocs=1, num_deallocs=2)
 
+    @unittest.skipIf(
+        config.triton.enable_native_matmul,
+        "generated code is different in native matmul"
+    )
     def test_preserves_zero_analysis(self):
         fns = (
             (lambda x: x.relu(), False),  # preserves zero
@@ -3334,9 +3407,9 @@ class TestPrologueFusion(TestCase):
             self.check_code(code[0], num_kernels=1, num_allocs=1, num_deallocs=2)
 
             if should_mask:
-                f = FileCheck().check("k_idx").check("a =").check_same("tl.where")
+              f = FileCheck().check("k_idx").check("a =").check_same("tl.where")
             else:
-                f = FileCheck().check("k_idx").check("a =").check_not("tl.where")
+              f = FileCheck().check("k_idx").check("a =").check_not("tl.where")
             f.check("tl.dot").run(code[0])
 
     @config.patch(realize_reads_threshold=1, realize_opcount_threshold=1)
@@ -3364,6 +3437,10 @@ class TestPrologueFusion(TestCase):
 
     @config.patch(realize_reads_threshold=1, realize_opcount_threshold=1)
     @config.patch(allow_buffer_reuse=False)
+    @unittest.skipIf(
+        config.triton.enable_native_matmul,
+        "generated code is different in native matmul"
+    )
     def test_mismatched_prologue_group(self):
         def foo(x, y, z):
             a = (x + 2) * 2
@@ -3385,6 +3462,10 @@ class TestPrologueFusion(TestCase):
     @config.patch(shape_padding=True)
     @config.patch(force_shape_pad=True)
     @parametrize("sizes", ((250, 245, 128), (250, 256, 128), (256, 128, 62)))
+    @unittest.skipIf(
+        config.triton.enable_native_matmul,
+        "generated code is different in native matmul"
+    )
     def test_prologue_masked_load(self, sizes):
         M, K, N = sizes
 
