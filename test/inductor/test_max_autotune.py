@@ -173,6 +173,7 @@ class TestMaxAutotune(TestCase):
             {
                 "max_autotune": True,
                 "triton.enable_persistent_tma_matmul": "1",
+                "triton.native_matmul": False,
                 "triton.enable_template_tma_store": tma_store,
                 "test_configs.autotune_choice_name_regex": "mm_persistent_tma",
             }
@@ -251,6 +252,7 @@ class TestMaxAutotune(TestCase):
             {
                 "max_autotune": True,
                 "triton.enable_persistent_tma_matmul": "1",
+                "triton.native_matmul": False,
                 "test_configs.autotune_choice_name_regex": "mm_persistent_tma",
             }
         ):
@@ -353,6 +355,7 @@ class TestMaxAutotune(TestCase):
                 {
                     "max_autotune": True,
                     "triton.enable_persistent_tma_matmul": "1",
+                    "triton.native_matmul": False,
                     "test_configs.autotune_choice_name_regex": "mm_persistent_tma",
                 }
             ),
@@ -389,6 +392,7 @@ class TestMaxAutotune(TestCase):
                 {
                     "max_autotune": True,
                     "triton.enable_persistent_tma_matmul": "1",
+                    "triton.native_matmul": False,
                     "triton.enable_template_tma_store": True,
                     "test_configs.autotune_choice_name_regex": "mm_persistent_tma",
                 }
@@ -423,6 +427,7 @@ class TestMaxAutotune(TestCase):
             {
                 "max_autotune": True,
                 "triton.enable_persistent_tma_matmul": "1",
+                "triton.native_matmul": False,
                 "test_configs.autotune_choice_name_regex": "mm_persistent_tma",
             }
         ):
@@ -619,6 +624,7 @@ class TestMaxAutotune(TestCase):
             {
                 "max_autotune": True,
                 "triton.enable_persistent_tma_matmul": "1",
+                "triton.native_matmul": False,
                 "triton.enable_template_tma_store": tma_store,
                 "test_configs.autotune_choice_name_regex": "mm_persistent_tma",
             }
@@ -749,6 +755,7 @@ class TestMaxAutotune(TestCase):
                 {
                     "max_autotune": True,
                     "triton.enable_persistent_tma_matmul": "1",
+                    "triton.native_matmul": False,
                     "test_configs.autotune_choice_name_regex": "mm_persistent_tma",
                 }
             ),
@@ -785,6 +792,7 @@ class TestMaxAutotune(TestCase):
             {
                 "max_autotune": True,
                 "triton.enable_persistent_tma_matmul": "1",
+                "triton.native_matmul": False,
                 "test_configs.autotune_choice_name_regex": "mm_persistent_tma",
             }
         ):
@@ -844,6 +852,7 @@ class TestMaxAutotune(TestCase):
             {
                 "max_autotune": True,
                 "triton.enable_persistent_tma_matmul": True,
+                "triton.native_matmul": False,
                 "max_autotune_gemm_backends": "TRITON",
                 "test_configs.autotune_choice_name_regex": "tma",
             }
