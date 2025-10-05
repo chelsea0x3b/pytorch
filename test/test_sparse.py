@@ -4913,7 +4913,7 @@ class TestSparseAny(TestCase):
                                     lambda i, v, sz: cnstr(i, v, sz, **kwargs_).to_dense(masked_grad=masked),
                                     args_, masked=masked)
                             else:
-                                if layout in {torch.sparse_csc, torch.sparse_bsr, torch.sparse_bsc} and 0:
+                                if layout in {torch.sparse_csc, torch.sparse_bsr, torch.sparse_bsc} and 0:  # noqa: SIM223
                                     # TODO: remove this if-block after gh-107370 is resolved
                                     continue
                                 torch.autograd.gradcheck(
