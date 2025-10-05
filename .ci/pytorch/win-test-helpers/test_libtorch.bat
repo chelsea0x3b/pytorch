@@ -21,23 +21,25 @@ setlocal enabledelayedexpansion
 set EXE_LIST=
 for /r "." %%a in (*.exe) do (
   if "%%~na" == "c10_intrusive_ptr_benchmark" (
-    :: NB: This is not a gtest executable file, thus couldn't be handled by pytest-cpp
+    :: NB: This is not a gtest executable file, thus couldn't be handled by
+    :: pytest-cpp and is excluded from test discovery by run_test
     call "%%~fa"
     if errorlevel 1 goto fail
     if not errorlevel 0 goto fail
+  ) else (
+    if "%%~na" == "verify_api_visibility" (
+      :: Skip verify_api_visibility as it is a compile-level test
+    ) else (
+      set EXE_LIST=!EXE_LIST! cpp/%%~na
+    )
   )
-  set EXE_LIST=!EXE_LIST! cpp/%%~na
 )
 
 cd %CWD%
 set CPP_TESTS_DIR=%TMP_DIR_WIN%\build\torch\test
 
 :: Run python test\run_test.py on the list
-python test\run_test.py --cpp --verbose -i !EXE_LIST! ^
-  --exclude ^
-  :: Skip verify_api_visibility as it a compile level test
-  "cpp/verify_api_visibility" ^
-  "cpp/c10_intrusive_ptr_benchmark"
+python test\run_test.py --cpp --verbose -i !EXE_LIST!
 if errorlevel 1 goto fail
 if not errorlevel 0 goto fail
 
