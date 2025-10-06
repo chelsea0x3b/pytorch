@@ -39,7 +39,7 @@ cd %CWD%
 set CPP_TESTS_DIR=%TMP_DIR_WIN%\build\torch\test
 
 :: Run python test\run_test.py on the list
-python test\run_test.py --cpp --verbose -i !EXE_LIST!
+NO_TD=True python test\run_test.py --cpp --verbose -i !EXE_LIST!
 if errorlevel 1 goto fail
 if not errorlevel 0 goto fail
 
