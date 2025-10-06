@@ -367,6 +367,23 @@ if not IS_WINDOWS:
             self.assertNotEqual(result.data_ptr(), expected.data_ptr())
             self.assertEqual(result.stride(), expected.stride())
 
+        @onlyCPU
+        @xfailIfTorchDynamo
+        # TODO: Debug this:
+        # Dynamo failed to run FX node with fake tensors:
+        # call_function libtorch_agnostic.test_parallel_for.default(*(100, 10), **{}):
+        # got RuntimeError('libtorch_agnostic::test_parallel_for() expected at most
+        # 2 argument(s) but received 3 argument(s).
+        # Declaration: libtorch_agnostic::test_parallel_for(int size, int grain_size) -> Tensor')
+        def test_parallel_for(self, device):
+            import libtorch_agnostic
+
+            size = 100
+            grain_size = 10
+            result = libtorch_agnostic.ops.test_parallel_for(size, grain_size)
+            expected = torch.arange(size, dtype=torch.int64)
+            self.assertEqual(result, expected)
+
     instantiate_device_type_tests(TestLibtorchAgnostic, globals(), except_for=None)
 
 if __name__ == "__main__":

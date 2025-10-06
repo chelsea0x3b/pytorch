@@ -1,3 +1,4 @@
+#include <ATen/Parallel.h>
 #include <ATen/native/quantized/cpu/qlinear.h>
 #include <ATen/record_function.h>
 #include <c10/core/DeviceType.h>
@@ -200,6 +201,21 @@ uint64_t aoti_torch_abi_version() {
   return TORCH_ABI_VERSION;
 }
 #endif // C10_MOBILE
+
+// Check if PyTorch was compiled with intra-op parallelism support.
+// This function works because shim_common.cpp includes ATen/Parallel.h, which
+// in turn includes:
+// - ATen/ParallelNative.h (if AT_PARALLEL_NATIVE=1) -> defines
+// INTRA_OP_PARALLEL
+// - ATen/ParallelOpenMP.h (if AT_PARALLEL_OPENMP=1 and _OPENMP is available) ->
+// defines INTRA_OP_PARALLEL
+bool aoti_torch_get_intra_op_parallel_enabled() {
+#ifdef INTRA_OP_PARALLEL
+  return true;
+#else
+  return false;
+#endif
+}
 
 bool aoti_torch_grad_mode_is_enabled() {
   return c10::GradMode::is_enabled();
@@ -1406,6 +1422,54 @@ AOTITorchError aoti_torch_zero_(AtenTensorHandle tensor) {
   AOTI_TORCH_CONVERT_EXCEPTION_TO_ERROR_CODE({
     at::Tensor* t = tensor_handle_to_tensor_pointer(tensor);
     t->zero_();
+  });
+}
+
+// ABI stable parallel utilities implementations
+void aoti_torch_lazy_init_num_threads() {
+  at::internal::lazy_init_num_threads();
+}
+
+bool aoti_torch_in_parallel_region() {
+  return at::in_parallel_region();
+}
+
+int32_t aoti_torch_get_num_threads() {
+  return static_cast<int32_t>(at::get_num_threads());
+}
+
+AOTITorchError aoti_torch_create_thread_id_guard(
+    int32_t thread_id,
+    ThreadIdGuardHandle* ret_guard) {
+  AOTI_TORCH_CONVERT_EXCEPTION_TO_ERROR_CODE({
+    at::internal::ThreadIdGuard* guard =
+        new at::internal::ThreadIdGuard(thread_id);
+    *ret_guard = reinterpret_cast<ThreadIdGuardHandle>(guard);
+  });
+}
+
+AOTITorchError aoti_torch_delete_thread_id_guard(ThreadIdGuardHandle guard) {
+  AOTI_TORCH_CONVERT_EXCEPTION_TO_ERROR_CODE({
+    at::internal::ThreadIdGuard* tid_guard =
+        reinterpret_cast<at::internal::ThreadIdGuard*>(guard);
+    delete tid_guard;
+  });
+}
+
+AOTITorchError aoti_torch_invoke_parallel(
+    int64_t begin,
+    int64_t end,
+    int64_t grain_size,
+    AOTIParallelLambda lambda,
+    void* ctx) {
+  AOTI_TORCH_CONVERT_EXCEPTION_TO_ERROR_CODE({
+    // Wrap the lambda+ctx pair into a callable object for invoke_parallel
+    auto wrapper = [lambda, ctx](int64_t chunk_begin, int64_t chunk_end) {
+      lambda(chunk_begin, chunk_end, ctx);
+    };
+
+    // Call PyTorch internal invoke_parallel with the wrapper
+    at::internal::invoke_parallel(begin, end, grain_size, wrapper);
   });
 }
 
