@@ -13,5 +13,6 @@ from .optimizer import load_sharded_optimizer_state_dict
 from .planner import LoadPlan, LoadPlanner, ReadItem, SavePlan, SavePlanner, WriteItem
 from .quantized_hf_storage import QuantizedHuggingFaceStorageReader
 from .state_dict_loader import load, load_state_dict
+from .metadata_utils import list_stored_state_dict
 from .state_dict_saver import async_save, save, save_state_dict
 from .storage import StorageReader, StorageWriter
