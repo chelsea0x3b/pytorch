@@ -1177,12 +1177,29 @@ def _context_parallel_buffers(
                 # load_balance_indices has shape (batch_size, seq_length)
                 # TODO: add shape check
                 # TODO: this for-looop can be done in a smarter way
-                for i in range(load_balance_indices.size(dim=0)):
-                    # NOTE: assuming batch dim is 0
-                    buffer_batch_i = torch.index_select(
-                        buffer[i], dim=seq_dim - 1, index=load_balance_indices[i]
+                lb_indices_batch_size = load_balance_indices.size(dim=0)
+                buffer_batch_size = buffer.size(dim=0)
+
+                if lb_indices_batch_size == buffer_batch_size:
+                    for i in range(buffer_batch_size):
+                        # NOTE: assuming batch dim is 0
+                        buffer_batch_i = torch.index_select(
+                            buffer[i], dim=seq_dim - 1, index=load_balance_indices[i]
+                        )
+                        buffer[i] = buffer_batch_i
+                elif lb_indices_batch_size == 1:
+                    for i in range(buffer_batch_size):
+                        # NOTE: assuming batch dim is 0
+                        buffer_batch_i = torch.index_select(
+                            buffer[i], dim=seq_dim - 1, index=load_balance_indices[0]
+                        )
+                        buffer[i] = buffer_batch_i
+                else:
+                    raise RuntimeError(
+                        "Cannot shuffle buffer: "
+                        f"load_balance_indices has shape {load_balance_indices.shape}, "
+                        f"but buffer has shape {buffer.shape}."
                     )
-                    buffer[i] = buffer_batch_i
 
         # use DTensor to shard the buffer on sequence dimension, retain the local tensor
         sharded_buffer = distribute_tensor(
@@ -1336,12 +1353,29 @@ def context_parallel_unshard(
                 # restore_indices has shape (batch_size, seq_length)
                 # TODO: add shape check
                 # TODO: this for-looop can be done in a smarter way
-                for i in range(restore_indices.size(dim=0)):
-                    # NOTE: assuming batch dim is 0
-                    unsharded_b_batch_i = torch.index_select(
-                        unsharded_b[i], dim=dim - 1, index=restore_indices[i]
+                lb_indices_batch_size = restore_indices.size(dim=0)
+                buffer_batch_size = unsharded_b.size(dim=0)
+
+                if lb_indices_batch_size == buffer_batch_size:
+                    for i in range(buffer_batch_size):
+                        # NOTE: assuming batch dim is 0
+                        unsharded_b_batch_i = torch.index_select(
+                            unsharded_b[i], dim=dim - 1, index=restore_indices[i]
+                        )
+                        unsharded_b[i] = unsharded_b_batch_i
+                elif lb_indices_batch_size == 1:
+                    for i in range(buffer_batch_size):
+                        # NOTE: assuming batch dim is 0
+                        unsharded_b_batch_i = torch.index_select(
+                            unsharded_b[i], dim=dim - 1, index=restore_indices[0]
+                        )
+                        unsharded_b[i] = unsharded_b_batch_i
+                else:
+                    raise RuntimeError(
+                        "Cannot restore buffer: "
+                        f"restore_indices has shape {restore_indices.shape}, "
+                        f"but unsharded_b has shape {unsharded_b.shape}."
                     )
-                    unsharded_b[i] = unsharded_b_batch_i
 
         unsharded_buffers.append(unsharded_b)
 
