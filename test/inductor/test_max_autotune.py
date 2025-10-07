@@ -12,7 +12,6 @@ import tempfile
 import unittest
 from collections.abc import Callable
 from typing import Optional
-from contextlib import contextmanager
 from unittest import mock
 
 import torch
@@ -1931,9 +1930,7 @@ class TestMaxAutotune(TestCase):
             "max_autotune_gemm_backends": "TRITON",
         }
     )
-    @unittest.skipIf(
-        config.triton.native_matmul, "only test on template-based matmul"
-    )
+    @unittest.skipIf(config.triton.native_matmul, "only test on template-based matmul")
     def test_triton_template_generated_code_cache_strategy(self):
         def func_test1(x, y, z, m):
             a = torch.matmul(x, y)
@@ -1960,9 +1957,7 @@ class TestMaxAutotune(TestCase):
             "max_autotune_gemm_backends": "TRITON",
         }
     )
-    @unittest.skipIf(
-        config.triton.native_matmul, "only test on template-based matmul"
-    )
+    @unittest.skipIf(config.triton.native_matmul, "only test on template-based matmul")
     def test_triton_template_generated_code_caching(self):
         def reset_counters():
             torch._dynamo.utils.counters.clear()
@@ -2147,9 +2142,7 @@ class TestMaxAutotune(TestCase):
             "max_autotune_gemm_backends": "TRITON",
         }
     )
-    @unittest.skipIf(
-        config.triton.native_matmul, "only test on template-based matmul"
-    )
+    @unittest.skipIf(config.triton.native_matmul, "only test on template-based matmul")
     def test_triton_template_generated_code_caching_bmm(self):
         def func_test1(x, y, z, m):
             a = torch.bmm(x, y)
@@ -2185,9 +2178,7 @@ class TestMaxAutotune(TestCase):
             "max_autotune_gemm_backends": "ATEN, TRITON",
         }
     )
-    @unittest.skipIf(
-        config.triton.native_matmul, "only test on template-based matmul"
-    )
+    @unittest.skipIf(config.triton.native_matmul, "only test on template-based matmul")
     def test_triton_template_generated_code_caching_mm_plus_mm(self):
         def func_test1(x, y, z, m):
             a = torch.mm(x, y)
@@ -2354,7 +2345,7 @@ class TestMaxAutotune(TestCase):
     @parametrize("max_autotune", (False, True))
     @config.patch(
         {
-            "test_configs.max_mm_configs": 4, 
+            "test_configs.max_mm_configs": 4,
             "max_autotune_gemm_backends": "ATEN,TRITON",
             "triton.native_matmul": False,
         }
