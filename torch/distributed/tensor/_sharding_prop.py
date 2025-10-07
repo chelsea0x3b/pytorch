@@ -337,7 +337,7 @@ class ShardingPropagator:
             output_sharding = self.propagate_op_sharding_non_cached(op_info.schema)
         else:
             output_sharding = cast(
-                OutputSharding, self.propagate_op_sharding(op_info.schema)
+                OutputSharding, self.propagate_op_sharding_non_cached(op_info.schema)
             )
         op_info.output_sharding = output_sharding
 
@@ -356,6 +356,8 @@ class ShardingPropagator:
             strategy_schema = self._wrap_with_op_strategy(op_schema)
 
             # run sharding strategy propagation/generation
+            # import fbvscode
+            # fbvscode.set_trace()
             op_strategy = self.op_strategy_funcs[op_schema.op](strategy_schema)
 
             if isinstance(op_strategy, OpStrategy):
